@@ -1,0 +1,159 @@
+AM_LDFLAGS = 
+
+#
+# PORTLAND compiler
+#
+if FC_IS_PORTLAND
+AM_FCFLAGS = -Mpreprocess -Minform=inform $(SVNDEF) -DPG_COMPILER -Mallocatable=03
+AM_FFLAGS = -Mpreprocess -Minform=inform $(SVNDEF) -DPG_COMPILER -Mallocatable=03
+if OPENMP_AM
+AM_LDFLAGS += -openmp
+AM_FCFLAGS += -openmp
+AM_FFLAGS  += -openmp
+endif
+if DEBUG
+AM_FCFLAGS += -DWITH_DEBUG_SYMBOLS -Mbounds -traceback -Minfo=all 
+AM_FCFLAGS += -Mchkfpstk -Mchkstk -Mdalign -Mdclchk -Mdepchk -Miomutex -Mrecursive -Ktrap=fp -O0 -g
+AM_LDFLAGS += -traceback
+endif
+if STATIC_LINKING_AM
+AM_FFLAGS += -Bstatic
+AM_FCFLAGS += -Bstatic
+AM_LDFLAGS += -Bstatic
+endif
+endif
+
+#
+# NAG compiler
+#
+
+# -gline is incompatible with -openmp as of 5.3.1 and 5.3.2 -mtrace=verbose
+if FC_IS_NAG
+AM_FCFLAGS = -fpp -kind=byte -DNAGFOR_COMPILER -nan 
+AM_FFLAGS  = -fpp -kind=byte -DNAGFOR_COMPILER -nan
+
+if OPENMP_AM
+AM_FCFLAGS += -openmp -g
+AM_FFLAGS  += -openmp -g
+#else
+#AM_LDFLAGS += -openmp
+endif
+
+if STATIC_LINKING_AM
+#AM_FFLAGS += -Bstatic
+#AM_FCFLAGS += -Bstatic
+AM_LDFLAGS += -Bstatic
+endif
+
+if DEBUG
+AM_FCFLAGS += -DWITH_DEBUG_SYMBOLS -C=all -g90
+AM_FFLAGS +=  -C=all -g90
+if OPENMP_AM
+AM_FCFLAGS += -g 
+AM_FFLAGS  += -g 
+else
+# -gline removed because it causes troubles with -openmp at link step (nagfor 5.3.2)
+AM_FCFLAGS += -g -gline
+AM_FFLAGS  += -g -gline
+AM_LDFLAGS += 
+endif
+if PROFILING_AM
+AM_FCFLAGS += -pg
+AM_FFLAGS += -pg
+endif
+endif
+endif
+
+#
+# GNU compiler
+#
+
+if FC_IS_GFORTRAN
+##AM_FCFLAGS += -x f95-cpp-input -Waliasing -Wampersand -Wsurprising -Wnonstd-intrinsics -Wline-truncation -Wunused-vars -fbounds-check -fopenmp
+##AM_FFLAGS += -Waliasing -Wampersand -Wsurprising -Wnonstd-intrinsics -Wline-truncation -Wunused-vars -fbounds-check -fopenmp
+
+AM_FCFLAGS = -fopenmp -Wall -Wextra -Wtabs -ffree-line-length-none -cpp
+AM_FFLAGS = -fopenmp -Wall -Wextra -Wtabs 
+if OPENMP_AM
+AM_LDFLAGS += -openmp
+AM_FCFLAGS += -openmp
+AM_FFLAGS  += -openmp
+endif
+if DEBUG
+# -fbounds-check temporarily removed from here because of bug with 4.6.1 (http://gcc.gnu.org/bugzilla/show_bug.cgi?id=50815)
+AM_FCFLAGS += -fbacktrace -DWITH_DEBUG_SYMBOLS
+endif
+endif
+
+
+#
+# INTEL compiler
+#
+
+# -assume realloc_lhs (see http://software.intel.com/en-us/forums/intel-fortran-compiler-for-linux-and-mac-os-x/topic/67379/)
+# is needed to ensure that the lhs of an assignment is automatically reallocated to match the shape of the corresponding rhs. note: this happens for derived types 
+# even without the -assume realloc_lhs option. see http://software.intel.com/en-us/forums/showthread.php?t=67352. Note2: this is F2003 standard behaviour
+# -pg option is to obtain profiling information
+# -heap-arrays - see http://software.intel.com/en-us/articles/determining-root-cause-of-sigsegv-or-sigbus-errors/ ... would be good if could be removed
+# if you want to link statically, add -static
+# to add more diagnostics: -diag-enable sc
+if FC_IS_INTEL
+# -openmp -openmp-report -diag-enable sc-parallel3 
+# it may be good to add an argument to -heap-array, to specify minimum size of arrays to put in heap
+# -fpp is preprocessor
+# -fpe0 means floating point exceptions are raised
+# -static-intel (implied by -static, itself implied by -fast) does not play well with OpenMP (130812: don't think this is still true)
+# -xHost (implied by -fast) does not play well with OpenMP
+# -warn notruncated_source can be used to ignore warnings about line length
+# -std03 issues warnings for non-F2003-compliant syntax
+# -assume protect_parens -prec-div -prec-sqrt
+# -fp-model strict floating point operations without optimizations, strict..
+AM_LDFLAGS += -openmp
+AM_FCFLAGS = -fpp -assume realloc_lhs -traceback -heap-arrays -warn all -warn notruncated_source -gen-interfaces -fpe0 -standard-semantics -assume nostd_value -init=snan
+AM_FFLAGS  =      -assume realloc_lhs -traceback -heap-arrays -warn all -warn notruncated_source -gen-interfaces -fpe0 -standard-semantics -assume nostd_value -init=snan
+if COARRAY_AM
+AM_LDFLAGS += -coarray
+AM_FCFLAGS += -coarray
+AM_FFLAGS  += -coarray
+else
+# Openmp should only be used if Coarray is not available. 
+if OPENMP_AM
+AM_LDFLAGS += -openmp
+AM_FCFLAGS += -openmp -openmp-report
+AM_FFLAGS  += -openmp -openmp-report
+else
+# no -fast, because that implies -static, which we may not want
+#AM_FCFLAGS += -fast
+#AM_FFLAGS += -fast
+endif
+endif
+if DEBUG
+# -diag-warning sc -diag-enable sc
+AM_FCFLAGS += -debug full -DWITH_DEBUG_SYMBOLS
+AM_FFLAGS  += -debug full -DWITH_DEBUG_SYMBOLS
+#checks
+#AM_FCFLAGS += -check noarg_temp_created
+#AM_FFLAGS += -check noarg_temp_created
+AM_FCFLAGS += -check all
+AM_FFLAGS += -check all
+#The following lines appeared to be necessary to circumvent an ifort bug, now resolved: http://software.intel.com/en-us/forums/showthread.php?t=77560
+#AM_FCFLAGS += -check nobounds 
+#AM_FFLAGS += -check nobounds 
+#AM_FCFLAGS += -warn nointerfaces
+#AM_FFLAGS += -warn nointerfaces
+else
+#AM_FCFLAGS += -fast
+#AM_FFLAGS += -fast
+endif
+if STATIC_LINKING_AM
+AM_FFLAGS += -static -static-intel
+AM_FCFLAGS += -static -static-intel
+AM_LDFLAGS += -static -static-intel
+endif
+if PROFILING_AM
+AM_FCFLAGS += -p
+AM_FFLAGS += -p
+endif
+endif
+
+
